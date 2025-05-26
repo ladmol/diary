@@ -1,0 +1,66 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: diary-app
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+      - supertokens
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-postgres://postgres:postgres@postgres:5432/diary?sslmode=disable}
+      - PORT=${PORT:-8080}
+      - SUPERTOKENS_CONNECTION_URI=${SUPERTOKENS_CONNECTION_URI:-http://supertokens:3567}
+      - SUPERTOKENS_API_KEY=${SUPERTOKENS_API_KEY:-}
+      - API_DOMAIN=${API_DOMAIN:-http://localhost:8080}
+      - WEBSITE_DOMAIN=${WEBSITE_DOMAIN:-http://localhost:3000}
+    networks:
+      - diary-network
+  postgres:
+    image: postgres:16-alpine
+    container_name: diary-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=diary
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - diary-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  supertokens:
+    image: registry.supertokens.io/supertokens/supertokens-postgresql:7.0
+    container_name: diary-supertokens
+    restart: unless-stopped
+    ports:
+      - "3567:3567"
+    environment:
+      - POSTGRESQL_CONNECTION_URI=postgresql://postgres:postgres@postgres:5432/diary
+    depends_on:
+      - postgres
+    networks:
+      - diary-network
+    healthcheck:
+      test: >
+        bash -c 'exec 3<>/dev/tcp/127.0.0.1/3567 && echo -e "GET /hello HTTP/1.1\r\nhost: 127.0.0.1:3567\r\nConnection: close\r\n\r\n" >&3 && cat <&3 | grep "Hello"'
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres-data:
+
+networks:
+  diary-network:
+    driver: bridge
